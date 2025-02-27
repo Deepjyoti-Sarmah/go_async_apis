@@ -15,7 +15,7 @@ type Config struct {
 }
 
 func (c *Config) DatabaseUrl() string {
-	return fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=disbale",
+	return fmt.Sprintf("postgresql://%s:%s@%s:%s/%s?sslmode=disable",
 		c.DatabaseUser,
 		c.DatabasePassword,
 		c.DatabaseHost,
