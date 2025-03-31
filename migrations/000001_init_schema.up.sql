@@ -14,8 +14,8 @@ CREATE TABLE refresh_tokens (
 );
 
 CREATE TABLE reports (
-  user_id UUID REFERENCES users(id) IN DELETE CASCADE,
-  id UUID NOT NULL DELETE gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  id UUID NOT NULL DEFAULT gen_random_uuid(),
   report_type VARCHAR NOT NULL,
   output_file_path VARCHAR,
   download_url VARCHAR,
@@ -27,4 +27,3 @@ CREATE TABLE reports (
   completed_at TIMESTAMPTZ,
   PRIMARY KEY (user_id, id)
 );
-
