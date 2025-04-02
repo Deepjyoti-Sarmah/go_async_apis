@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Deepjyoti-Sarmah/fast-api/config"
@@ -21,8 +22,18 @@ func TestUserStore(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
+	currentDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Dir(currentDir)
+	migrationsPath := filepath.Join(projectRoot, "migrations")
+
+	_, err = os.Stat(migrationsPath)
+	require.NoError(t, err, "migrations directory not found at: "+migrationsPath)
+
 	m, err := migrate.New(
-		"file:///migrations",
+		// "file://./migrations",
+		"file://"+migrationsPath,
 		conf.DatabaseUrl(),
 	)
 	require.NoError(t, err)
@@ -32,7 +43,7 @@ func TestUserStore(t *testing.T) {
 	}
 
 	userStore := NewUserStore(db)
-	user, err := userStore.CreateUser(context.Background(), "text@test.com", "testingpassword")
+	user, err := userStore.CreateUser(context.Background(), "test@test.com", "testingpassword")
 	require.NoError(t, err)
 
 	require.Equal(t, "test@test.com", user.Email)
