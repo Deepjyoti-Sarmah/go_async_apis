@@ -35,4 +35,11 @@ func TestUserStore(t *testing.T) {
 	require.Equal(t, user.Id, user2.Id)
 	require.Equal(t, user.HashedPasswordBase64, user2.HashedPasswordBase64)
 	require.Equal(t, user.CreatedAt.UnixNano(), user2.CreatedAt.UnixNano())
+
+	user2, err = userStore.ByEmail(ctx, user.Email)
+	require.NoError(t, err)
+	require.Equal(t, user.Email, user2.Email)
+	require.Equal(t, user.Id, user2.Id)
+	require.Equal(t, user.HashedPasswordBase64, user2.HashedPasswordBase64)
+	require.Equal(t, user.CreatedAt.UnixNano(), user2.CreatedAt.UnixNano())
 }
