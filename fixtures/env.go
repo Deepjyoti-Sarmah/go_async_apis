@@ -1,27 +1,39 @@
-package store
+package fixtures
 
 import (
-	"context"
+	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Deepjyoti-Sarmah/fast-api/config"
+	"github.com/Deepjyoti-Sarmah/fast-api/store"
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/stretchr/testify/require"
 )
 
-func TestUserStore(t *testing.T) {
+type TestEnv struct {
+	Config *config.Config
+	Db     *sql.DB
+}
+
+func NewTestEnv(t *testing.T) *TestEnv {
 	os.Setenv("ENV", string(config.Env_Test))
 	conf, err := config.New()
 	require.NoError(t, err)
 
-	db, err := NewPostgresDb(conf)
+	db, err := store.NewPostgresDb(conf)
 	require.NoError(t, err)
-	defer db.Close()
 
+	return &TestEnv{
+		conf,
+		db,
+	}
+}
+
+func (te *TestEnv) SetupDb(t *testing.T) func(t *testing.T) {
 	currentDir, err := os.Getwd()
 	require.NoError(t, err)
 
@@ -34,7 +46,7 @@ func TestUserStore(t *testing.T) {
 	m, err := migrate.New(
 		// "file://./migrations",
 		"file://"+migrationsPath,
-		conf.DatabaseUrl(),
+		te.Config.DatabaseUrl(),
 	)
 	require.NoError(t, err)
 
@@ -42,10 +54,10 @@ func TestUserStore(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	userStore := NewUserStore(db)
-	user, err := userStore.CreateUser(context.Background(), "test@test.com", "testingpassword")
-	require.NoError(t, err)
+	return te.TeardownDb
+}
 
-	require.Equal(t, "test@test.com", user.Email)
-	require.NoError(t, user.ComparePassword("testingpassword"))
+func (te *TestEnv) TeardownDb(t *testing.T) {
+	_, err := te.Db.Exec(fmt.Sprintf("TRUNCATE TABLE %s", strings.Join([]string{"users", "refresh_tokens", "reports"}, ", ")))
+	require.NoError(t, err)
 }

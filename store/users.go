@@ -38,7 +38,7 @@ func (u *User) ComparePassword(password string) error {
 
 	err = bcrypt.CompareHashAndPassword(hashedPassword, []byte(password))
 	if err != nil {
-		return fmt.Errorf("Invalid password %w", err)
+		return fmt.Errorf("invalid password: %w", err)
 	}
 
 	return nil
@@ -78,7 +78,7 @@ func (s *UserStore) ById(ctx context.Context, userId uuid.UUID) (*User, error) {
 	var user User
 
 	if err := s.db.GetContext(ctx, &user, query, userId); err != nil {
-		return nil, fmt.Errorf("Failed to fetch user by Id %s: %w", userId, err)
+		return nil, fmt.Errorf("failed to fetch user by Id %s: %w", userId, err)
 	}
 
 	return &user, nil
