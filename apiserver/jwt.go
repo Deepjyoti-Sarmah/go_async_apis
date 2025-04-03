@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+var signingMethod = jwt.SigningMethodES256
+
 type JwtManager struct {
 	config *config.Config
 }
@@ -29,12 +31,38 @@ type CustomClaims struct {
 	jwt.RegisteredClaims
 }
 
+func (j *JwtManager) Parse(token string) (*jwt.Token, error) {
+	parser := jwt.NewParser()
+	jwtToken, err := parser.Parse(token, func(t *jwt.Token) (interface{}, error) {
+		if t.Method != signingMethod {
+			return nil, fmt.Errorf("unexprected signin method: %v", t.Header["alg"])
+		}
+		return []byte(j.config.JwtSecret), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse token: %v", err)
+	}
+
+	return jwtToken, nil
+}
+
+func (j *JwtManager) IsAccessToken(token *jwt.Token) bool {
+	jwtClaims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return false
+	}
+	if tokenType, ok := jwtClaims["token_type"]; ok {
+		return tokenType == "access"
+	}
+	return false
+}
+
 func (j *JwtManager) GenerateTokenPair(userId uuid.UUID) (*TokenPair, error) {
 	now := time.Now()
 	issuer := "http://" + j.config.ApiServerHost + ":" + j.config.ApiServerPort
 
 	// AccessToken
-	jwtAccessToken := jwt.NewWithClaims(jwt.SigningMethodES256,
+	jwtAccessToken := jwt.NewWithClaims(signingMethod,
 		CustomClaims{
 			TokenType: "access",
 			RegisteredClaims: jwt.RegisteredClaims{
@@ -54,7 +82,7 @@ func (j *JwtManager) GenerateTokenPair(userId uuid.UUID) (*TokenPair, error) {
 	}
 
 	// RefreshToken
-	jwtRefreshToken := jwt.NewWithClaims(jwt.SigningMethodES256,
+	jwtRefreshToken := jwt.NewWithClaims(signingMethod,
 		CustomClaims{
 			TokenType: "refresh",
 			RegisteredClaims: jwt.RegisteredClaims{
