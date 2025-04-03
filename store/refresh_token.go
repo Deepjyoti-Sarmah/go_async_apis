@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type RefreshTokenStore struct {
@@ -31,19 +31,63 @@ type RefreshToken struct {
 	ExpiredAt   time.Time `db:"expired_at"`
 }
 
+func (s *RefreshTokenStore) getBase64HashFromToken(token *jwt.Token) (string, error) {
+	// hashedToken, err := bcrypt.GenerateFromPassword([]byte(token.Raw), bcrypt.DefaultCost)
+	// if err != nil {
+	// 	return "", fmt.Errorf("bcrypting the refresh token failed: %w", err)
+	// }
+
+	h := sha256.New()
+	h.Write([]byte(token.Raw))
+	hashedByte := h.Sum(nil)
+
+	base64TokenHash := base64.StdEncoding.EncodeToString(hashedByte)
+
+	return base64TokenHash, nil
+}
+
 func (s *RefreshTokenStore) Create(ctx context.Context, userId uuid.UUID, token *jwt.Token) (*RefreshToken, error) {
-	const insert = `INSERT INTO refresh_token (user_id, hashed_token, expired_at) VALUES ($1, $2, $3)`
-	hashedToken, err := bcrypt.GenerateFromPassword([]byte(token.Raw), bcrypt.DefaultCost)
+	const insert = `INSERT INTO refresh_tokens (user_id, hashed_token, expired_at) VALUES ($1, $2, $3) RETURNING *`
+
+	base64TokenHash, err := s.getBase64HashFromToken(token)
 	if err != nil {
-		return nil, fmt.Errorf("bcrypting the refresh token failed: %w", err)
+		return nil, fmt.Errorf("failed to get base64 encoded token hash: %w", err)
 	}
 
-	base64TokenHash := base64.StdEncoding.EncodeToString(hashedToken)
+	expiresAt, err := token.Claims.GetExpirationTime()
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract expiration time: %w", err)
+	}
 
 	var refreshToken RefreshToken
-	if err := s.db.GetContext(ctx, &refreshToken, insert, userId, base64TokenHash); err != nil {
+	if err := s.db.GetContext(ctx, &refreshToken, insert, userId, base64TokenHash, expiresAt.Time); err != nil {
 		return nil, fmt.Errorf("failed to create refresh token record: %w", err)
 	}
 
 	return &refreshToken, nil
+}
+
+func (s *RefreshTokenStore) ByPrimaryKey(ctx context.Context, userId uuid.UUID, token *jwt.Token) (*RefreshToken, error) {
+	const query = `SELECT * FROM refresh_tokens WHERE user_id = $1 AND hashed_token = $2;`
+
+	base64TokenHash, err := s.getBase64HashFromToken(token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get base64 encoded token hash: %w", err)
+	}
+
+	var refreshToken RefreshToken
+	if err := s.db.GetContext(ctx, &refreshToken, query, userId, base64TokenHash); err != nil {
+		return nil, fmt.Errorf("failed to fetch hashed_token %s record for user %s: %w", base64TokenHash, userId, err)
+	}
+
+	return &refreshToken, nil
+}
+
+func (s *RefreshTokenStore) DeleteUserTokens(ctx context.Context, userId uuid.UUID) (sql.Result, error) {
+	const deleteStatement = `DELETE FROM refresh_tokens WHERE user_id = $1;`
+	result, err := s.db.ExecContext(ctx, deleteStatement, userId)
+	if err != nil {
+		return result, fmt.Errorf("failed to delete refresh_tokens record: %w", err)
+	}
+	return result, nil
 }

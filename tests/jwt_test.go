@@ -13,7 +13,7 @@ func TestJwtManager(t *testing.T) {
 	conf, err := config.New()
 	require.NoError(t, err)
 
-	jwtManager := apiserver.NextJwtManager(conf)
+	jwtManager := apiserver.NewJwtManager(conf)
 
 	userId := uuid.New()
 	tokenPair, err := jwtManager.GenerateTokenPair(userId)

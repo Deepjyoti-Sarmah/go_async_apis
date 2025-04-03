@@ -15,7 +15,7 @@ type JwtManager struct {
 	config *config.Config
 }
 
-func NextJwtManager(config *config.Config) *JwtManager {
+func NewJwtManager(config *config.Config) *JwtManager {
 	return &JwtManager{
 		config: config,
 	}
