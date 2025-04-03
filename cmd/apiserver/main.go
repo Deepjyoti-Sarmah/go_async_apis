@@ -37,8 +37,9 @@ func run() error {
 	}
 
 	dataStore := store.New(db)
+	jwtManager := apiserver.NewJwtManager(conf)
 
-	server := apiserver.New(conf, logger, dataStore)
+	server := apiserver.New(conf, logger, dataStore, jwtManager)
 	if err := server.Start(ctx); err != nil {
 		return err
 	}

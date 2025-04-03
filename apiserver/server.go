@@ -38,6 +38,7 @@ func (s *ApiServer) Start(ctx context.Context) error {
 
 	mux.HandleFunc("GET /ping", s.ping)
 	mux.HandleFunc("POST /auth/signup", s.signupHandler())
+	mux.HandleFunc("POST /auth/signin", s.signinHandler())
 
 	middleware := NextLoggerMiddleware(s.logger)
 	server := &http.Server{
