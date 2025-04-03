@@ -9,17 +9,20 @@ import (
 	"time"
 
 	"github.com/Deepjyoti-Sarmah/fast-api/config"
+	"github.com/Deepjyoti-Sarmah/fast-api/store"
 )
 
 type ApiServer struct {
 	config *config.Config
 	logger *slog.Logger
+	store  *store.Store
 }
 
-func New(config *config.Config, logger *slog.Logger) *ApiServer {
+func New(config *config.Config, logger *slog.Logger, store *store.Store) *ApiServer {
 	return &ApiServer{
 		config,
 		logger,
+		store,
 	}
 }
 
@@ -30,10 +33,14 @@ func (s *ApiServer) ping(w http.ResponseWriter, r *http.Request) {
 
 func (s *ApiServer) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ping", s.ping)
+
+	mux.HandleFunc("GET /ping", s.ping)
+	mux.HandleFunc("POST /auth/signup", s.signupHandler())
+
+	middleware := NextLoggerMiddleware(s.logger)
 	server := &http.Server{
 		Addr:    net.JoinHostPort(s.config.ApiServerHost, s.config.ApiServerPort),
-		Handler: mux,
+		Handler: middleware(mux),
 	}
 
 	go func() {
