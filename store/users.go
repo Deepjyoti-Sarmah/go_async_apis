@@ -63,7 +63,7 @@ func (s *UserStore) CreateUser(ctx context.Context, email string, password strin
 }
 
 func (s *UserStore) ByEmail(ctx context.Context, email string) (*User, error) {
-	const query = `SELECT * FROM users WHERE email = $1`
+	const query = `SELECT * FROM users WHERE email = $1;`
 	var user User
 
 	if err := s.db.GetContext(ctx, &user, query, email); err != nil {
