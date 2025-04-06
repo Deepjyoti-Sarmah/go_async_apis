@@ -32,6 +32,7 @@ provider "aws" {
 
   endpoints {
     s3             = "http://s3.localhost.localstack.cloud:4566"
+    sqs            = "http://localhost:4566"
   }
 }
 
@@ -39,7 +40,7 @@ resource "aws_s3_bucket" "reports-s3-bucket" {
   bucket = var.s3_bucket
 }
 
-resource "aws_sqs_queue" "terraform_queue" {
+resource "aws_sqs_queue" "reports-sqs-queue" {
   name                      = var.sqs_queue
   delay_seconds             = 5
   max_message_size          = 2048
