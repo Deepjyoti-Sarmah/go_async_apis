@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 func main() {
@@ -36,5 +37,17 @@ func main() {
 
 	for _, bucket := range out.Buckets {
 		fmt.Println(*bucket.Name)
+	}
+
+	sqsClient := sqs.NewFromConfig(sdkConfig, func(options *sqs.Options) {
+		options.BaseEndpoint = aws.String(conf.LocalstackEndpont)
+	})
+
+	sqsOut, err := sqsClient.ListQueues(ctx, &sqs.ListQueuesInput{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, q := range sqsOut.QueueUrls {
+		fmt.Println(q)
 	}
 }
