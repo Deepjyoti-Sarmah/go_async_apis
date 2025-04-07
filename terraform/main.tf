@@ -18,6 +18,14 @@ variable "sqs_queue" {
   type = string
 }
 
+variable "s3_localstack_endpoint" {
+  type = string
+}
+
+variable "localstack_endpoint"a {
+    type = string
+}
+
 
 provider "aws" {
 
@@ -31,8 +39,8 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    s3             = "http://s3.localhost.localstack.cloud:4566"
-    sqs            = "http://localhost:4566"
+    s3             = var.s3_localstack_endpoint
+    sqs            = var.localstack_endpoint
   }
 }
 
