@@ -25,7 +25,7 @@ type Report struct {
 	UserId               uuid.UUID  `db:"user_id"`
 	Id                   uuid.UUID  `db:"id"`
 	ReportType           string     `db:"report_type"`
-	OutputFilePath       string     `db:"output_file_path"`
+	OutputFilePath       *string    `db:"output_file_path"`
 	DownloadUrl          *string    `db:"download_url"`
 	DownloadUrlExpiresAt *time.Time `db:"download_url_expires_at"`
 	ErrorMessage         *string    `db:"error_message"`
@@ -46,4 +46,40 @@ func (s *ReportStore) Create(ctx context.Context, userId uuid.UUID, reportType s
 	return &report, nil
 }
 
+func (s *ReportStore) Update(ctx context.Context, report *Report) (*Report, error) {
+	const update = `UPDATE reports
+                  SET output_file_path = $1,
+                      download_url = $2,
+                      download_url_expires_at = $3,
+                      error_message = $4,
+                      started_at = $5,
+                      completed_at = $6,
+                      failed_at = $7
+                  WHERE user_id = $8 AND id = $9 RETURNING *;`
+	if err := s.db.GetContext(ctx, &report, update,
+		report.OutputFilePath,
+		report.DownloadUrl,
+		report.DownloadUrlExpiresAt,
+		report.ErrorMessage,
+		report.StartedAt,
+		report.CompletedAt,
+		report.FailedAt,
+		report.UserId,
+		report.Id,
+	); err != nil {
+		return nil, fmt.Errorf("failed to update reports %s for user %s: %w", report.Id, report.UserId, err)
+	}
 
+	return report, nil
+}
+
+func (s *ReportStore) ByPrimaryKey(ctx context.Context, userId uuid.UUID, id uuid.UUID) (*Report, error) {
+	const query = `SELECT * FROM reports WHERE user_id = $1 AND id = $2;`
+	var report Report
+
+	if err := s.db.GetContext(ctx, &report, query, userId, id); err != nil {
+		return nil, fmt.Errorf("failed to query report %s for user %s: %w", id, userId, err)
+	}
+
+	return &report, nil
+}
