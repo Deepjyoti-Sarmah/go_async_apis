@@ -56,7 +56,9 @@ func (s *ReportStore) Update(ctx context.Context, report *Report) (*Report, erro
                       completed_at = $6,
                       failed_at = $7
                   WHERE user_id = $8 AND id = $9 RETURNING *;`
-	if err := s.db.GetContext(ctx, &report, update,
+
+	var updated Report
+	if err := s.db.GetContext(ctx, &updated, update,
 		report.OutputFilePath,
 		report.DownloadUrl,
 		report.DownloadUrlExpiresAt,
@@ -70,7 +72,7 @@ func (s *ReportStore) Update(ctx context.Context, report *Report) (*Report, erro
 		return nil, fmt.Errorf("failed to update reports %s for user %s: %w", report.Id, report.UserId, err)
 	}
 
-	return report, nil
+	return &updated, nil
 }
 
 func (s *ReportStore) ByPrimaryKey(ctx context.Context, userId uuid.UUID, id uuid.UUID) (*Report, error) {
