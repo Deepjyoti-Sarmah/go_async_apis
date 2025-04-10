@@ -1,11 +1,24 @@
 package reports
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/csv"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Deepjyoti-Sarmah/fast-api/config"
 	"github.com/Deepjyoti-Sarmah/fast-api/store"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 )
 
 type RepportBuilder struct {
+	config      *config.Config
 	reportStore *store.ReportStore
 	LozClient   *LozClient
 	s3Client    *s3.Client
@@ -17,4 +30,97 @@ func NewReportBuilder(reportStore *store.ReportStore, lozClient *LozClient, s3Cl
 		LozClient:   lozClient,
 		s3Client:    s3Client,
 	}
+}
+
+func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId uuid.UUID) (*store.Report, error) {
+	report, err := b.reportStore.ByPrimaryKey(ctx, userId, reportId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get report %s for usrr %s: %w", reportId, userId, err)
+	}
+
+	if report.StartedAt != nil {
+		return report, nil
+	}
+
+	now := time.Now()
+	report.StartedAt = &now
+	report.CompletedAt = nil
+	report.FailedAt = nil
+	report.ErrorMessage = nil
+	report.DownloadUrl = nil
+	report.DownloadUrlExpiresAt = nil
+	report.OutputFilePath = nil
+
+	report, err = b.reportStore.Update(ctx, report)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update report %s for user %s: %w", report, userId, err)
+	}
+
+	resp, err := b.LozClient.GetMonsters()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get monsters data: %w", err)
+	}
+
+	if len(resp.Data) == 0 {
+		return nil, fmt.Errorf("no monsters data found %w", err)
+	}
+
+	var buffer bytes.Buffer
+	gzipWriter := gzip.NewWriter(&buffer)
+	csvWriter := csv.NewWriter(gzipWriter)
+	header := []string{"name", "id", "category", "description", "image", "common_location", "drops", "dlc"}
+	if err := csvWriter.Write(header); err != nil {
+		return nil, fmt.Errorf("failed to write csv header: %w", err)
+	}
+
+	for _, moster := range resp.Data {
+		csvRow := []string{
+			moster.Name,
+			fmt.Sprintf("%d", moster.Id),
+			moster.Category,
+			moster.Description,
+			moster.Image,
+			strings.Join(moster.CommonLocation, ", "),
+			strings.Join(moster.Drops, ", "),
+			strconv.FormatBool(moster.Dlc),
+		}
+
+		if err := csvWriter.Write(csvRow); err != nil {
+			return nil, fmt.Errorf("failed to write csv row: %w", err)
+		}
+
+		if err := csvWriter.Error(); err != nil {
+			return nil, fmt.Errorf("failed to write csv row: %w", err)
+		}
+	}
+
+	csvWriter.Flush()
+	if err := csvWriter.Error(); err != nil {
+		return nil, fmt.Errorf("failed to flush csv row: %w", err)
+	}
+
+	if err := gzipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close gzip writter: %w", err)
+	}
+
+	key := "/users" + userId.String() + "/" + reportId.String() + ".csv.gz"
+	_, err = b.s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Key:    aws.String(key),
+		Bucket: aws.String(b.config.S3Bucket),
+		Body:   bytes.NewReader(buffer.Bytes()),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload reports: %w", err)
+	}
+
+	now = time.Now()
+	report.OutputFilePath = &key
+	report.CompletedAt = &now
+
+	report, err = b.reportStore.Update(ctx, report)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update report %s for user %s: %w", reportId, userId, err)
+	}
+
+	return report, nil
 }

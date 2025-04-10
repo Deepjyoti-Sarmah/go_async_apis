@@ -36,7 +36,7 @@ type Monster struct {
 }
 
 type GetMonstersResponse struct {
-	Date []Monster `json:"data"`
+	Data []Monster `json:"data"`
 }
 
 func (c *LozClient) GetMonsters() (*GetMonstersResponse, error) {
