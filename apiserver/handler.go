@@ -10,6 +10,7 @@ import (
 
 	"github.com/Deepjyoti-Sarmah/fast-api/reports"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/google/uuid"
 )
@@ -304,6 +305,70 @@ func (s *ApiServer) createReportHandler() http.HandlerFunc {
 				Status:               report.Status(),
 			},
 		}, http.StatusCreated, w); err != nil {
+			return NewErrWithStatus(http.StatusInternalServerError, err)
+		}
+
+		return nil
+	})
+}
+
+func (s *ApiServer) getReportHander() http.HandlerFunc {
+	return handler(func(w http.ResponseWriter, r *http.Request) error {
+		reportIdStr := r.PathValue("id")
+		reportId, err := uuid.Parse(reportIdStr)
+		if err != nil {
+			return NewErrWithStatus(http.StatusBadRequest, err)
+		}
+
+		user, ok := UserFromContext(r.Context())
+		if !ok {
+			return NewErrWithStatus(http.StatusUnauthorized, fmt.Errorf("user not found in context"))
+		}
+
+		report, err := s.store.ReportStore.ByPrimaryKey(r.Context(), user.Id, reportId)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return NewErrWithStatus(http.StatusNotFound, err)
+			}
+			return NewErrWithStatus(http.StatusInternalServerError, err)
+		}
+
+		if report.CompletedAt != nil && report.DownloadUrlExpiresAt != nil && report.DownloadUrlExpiresAt.Before(time.Now()) {
+			// to s3 client (presigned client)
+			expiresAt := time.Now().Add(time.Second * 10)
+			signedUrl, err := s.presignedClient.PresignGetObject(r.Context(), &s3.GetObjectInput{
+				Bucket: aws.String(s.config.S3Bucket),
+				Key:    report.OutputFilePath,
+			}, func(options *s3.PresignOptions) {
+				options.Expires = time.Second * 10
+			})
+			if err != nil {
+				return NewErrWithStatus(http.StatusInternalServerError, err)
+			}
+			report.DownloadUrl = &signedUrl.URL
+			report.DownloadUrlExpiresAt = &expiresAt
+
+			report, err = s.store.ReportStore.Update(r.Context(), report)
+			if err != nil {
+				return NewErrWithStatus(http.StatusInternalServerError, err)
+			}
+		}
+
+		if err := encode(ApiResponse[ApiReport]{
+			Data: &ApiReport{
+				Id:                   report.Id,
+				ReportType:           report.ReportType,
+				OutputFilePath:       report.OutputFilePath,
+				DownloadUrl:          report.DownloadUrl,
+				DownloadUrlExpiresAt: report.DownloadUrlExpiresAt,
+				ErrorMessage:         report.ErrorMessage,
+				CreatedAt:            report.CreatedAt,
+				StartedAt:            report.StartedAt,
+				CompletedAt:          report.CompletedAt,
+				FailedAt:             report.FailedAt,
+				Status:               report.Status(),
+			},
+		}, http.StatusOK, w); err != nil {
 			return NewErrWithStatus(http.StatusInternalServerError, err)
 		}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/Deepjyoti-Sarmah/fast-api/config"
 	"github.com/Deepjyoti-Sarmah/fast-api/store"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -53,7 +54,14 @@ func run() error {
 		options.BaseEndpoint = aws.String(conf.LocalstackEndpont)
 	})
 
-	server := apiserver.New(conf, logger, dataStore, jwtManager, sqsClient)
+	s3Client := s3.NewFromConfig(sdkConfig, func(options *s3.Options) {
+		options.BaseEndpoint = aws.String(conf.S3LocalstackEndpont)
+		options.UsePathStyle = true
+	})
+
+	presignedClient := s3.NewPresignClient(s3Client)
+
+	server := apiserver.New(conf, logger, dataStore, jwtManager, sqsClient, presignedClient)
 	if err := server.Start(ctx); err != nil {
 		return err
 	}

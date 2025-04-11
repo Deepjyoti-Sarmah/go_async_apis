@@ -10,24 +10,27 @@ import (
 
 	"github.com/Deepjyoti-Sarmah/fast-api/config"
 	"github.com/Deepjyoti-Sarmah/fast-api/store"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 type ApiServer struct {
-	config     *config.Config
-	logger     *slog.Logger
-	store      *store.Store
-	JwtManager *JwtManager
-	sqsClient  *sqs.Client
+	config          *config.Config
+	logger          *slog.Logger
+	store           *store.Store
+	JwtManager      *JwtManager
+	sqsClient       *sqs.Client
+	presignedClient *s3.PresignClient
 }
 
-func New(config *config.Config, logger *slog.Logger, store *store.Store, jwtManager *JwtManager, sqsClient *sqs.Client) *ApiServer {
+func New(config *config.Config, logger *slog.Logger, store *store.Store, jwtManager *JwtManager, sqsClient *sqs.Client, presignedClient *s3.PresignClient) *ApiServer {
 	return &ApiServer{
 		config,
 		logger,
 		store,
 		jwtManager,
 		sqsClient,
+		presignedClient,
 	}
 }
 
@@ -44,6 +47,7 @@ func (s *ApiServer) Start(ctx context.Context) error {
 	mux.HandleFunc("POST /auth/signin", s.signinHandler())
 	mux.HandleFunc("POST /auth/refresh", s.tokenRefreshHandler())
 	mux.HandleFunc("POST /reports", s.createReportHandler())
+	mux.HandleFunc("GET /reports/{id}", s.getReportHander())
 
 	middleware := NextLoggerMiddleware(s.logger)
 	middleware = NewAuthMiddleware(s.JwtManager, s.store.Users)
