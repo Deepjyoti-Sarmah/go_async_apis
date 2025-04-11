@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -22,18 +23,20 @@ type RepportBuilder struct {
 	reportStore *store.ReportStore
 	LozClient   *LozClient
 	s3Client    *s3.Client
+	logger      *slog.Logger
 }
 
-func NewReportBuilder(reportStore *store.ReportStore, lozClient *LozClient, s3Client *s3.Client) *RepportBuilder {
+func NewReportBuilder(config *config.Config, reportStore *store.ReportStore, lozClient *LozClient, s3Client *s3.Client, logger *slog.Logger) *RepportBuilder {
 	return &RepportBuilder{
 		reportStore: reportStore,
 		LozClient:   lozClient,
 		s3Client:    s3Client,
+		logger:      logger,
 	}
 }
 
-func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId uuid.UUID) (*store.Report, error) {
-	report, err := b.reportStore.ByPrimaryKey(ctx, userId, reportId)
+func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId uuid.UUID) (report *store.Report, err error) {
+	report, err = b.reportStore.ByPrimaryKey(ctx, userId, reportId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get report %s for usrr %s: %w", reportId, userId, err)
 	}
@@ -41,6 +44,18 @@ func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId u
 	if report.StartedAt != nil {
 		return report, nil
 	}
+
+	defer func() {
+		if err != nil {
+			now := time.Now()
+			errMsg := err.Error()
+			report.FailedAt = &now
+			report.ErrorMessage = &errMsg
+			if _, updateErr := b.reportStore.Update(ctx, report); updateErr != nil {
+				b.logger.Error("failed to update report", "error", err.Error())
+			}
+		}
+	}()
 
 	now := time.Now()
 	report.StartedAt = &now
@@ -53,7 +68,7 @@ func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId u
 
 	report, err = b.reportStore.Update(ctx, report)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update report %s for user %s: %w", report, userId, err)
+		return nil, fmt.Errorf("failed to update report %s for user %s: %w", reportId, userId, err)
 	}
 
 	resp, err := b.LozClient.GetMonsters()
@@ -122,5 +137,6 @@ func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId u
 		return nil, fmt.Errorf("failed to update report %s for user %s: %w", reportId, userId, err)
 	}
 
+	b.logger.Info("successfully generated report", "report_id", report.Id, "userId", userId.String(), "path", key)
 	return report, nil
 }

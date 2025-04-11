@@ -10,6 +10,7 @@ import (
 
 	"github.com/Deepjyoti-Sarmah/fast-api/config"
 	"github.com/Deepjyoti-Sarmah/fast-api/store"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 type ApiServer struct {
@@ -17,14 +18,16 @@ type ApiServer struct {
 	logger     *slog.Logger
 	store      *store.Store
 	JwtManager *JwtManager
+	sqsClient  *sqs.Client
 }
 
-func New(config *config.Config, logger *slog.Logger, store *store.Store, jwtManager *JwtManager) *ApiServer {
+func New(config *config.Config, logger *slog.Logger, store *store.Store, jwtManager *JwtManager, sqsClient *sqs.Client) *ApiServer {
 	return &ApiServer{
 		config,
 		logger,
 		store,
 		jwtManager,
+		sqsClient,
 	}
 }
 
