@@ -46,13 +46,21 @@ func (w *Worker) Start(ctx context.Context) error {
 	for i := 0; i < w.concurrency; i++ {
 		go func(id int) {
 			for {
+				w.logger.Info("starting goroutine #%d", id)
 				select {
 				case <-ctx.Done():
 					w.logger.Error("worker stopped", "goroutine_id", id, "error", ctx.Err())
 					return
 				case message := <-w.channel:
-					if err := w.processMessage(ctx, message, queueUrlOutput.QueueUrl); err != nil {
+					if err := w.processMessage(ctx, message); err != nil {
 						w.logger.Error("failed to process message", "error", err, "goroutine_id", id)
+						continue
+					}
+					if _, err := w.sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+						QueueUrl:      queueUrlOutput.QueueUrl,
+						ReceiptHandle: message.ReceiptHandle,
+					}); err != nil {
+						w.logger.Error("failed to delete message %s %w", *message.MessageId, err)
 					}
 				}
 			}
@@ -82,7 +90,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) processMessage(ctx context.Context, message types.Message, queueUrl *string) error {
+func (w *Worker) processMessage(ctx context.Context, message types.Message) error {
 	w.logger.Info("processing message", "message_id", *message.MessageId)
 	if message.Body == nil || *message.Body == "" {
 		w.logger.Warn("message body is invalid", "messgae_id", message.MessageId)
@@ -100,13 +108,6 @@ func (w *Worker) processMessage(ctx context.Context, message types.Message, queu
 	_, err := w.builder.Build(builderCtx, msg.UserId, msg.ReportId)
 	if err != nil {
 		return fmt.Errorf("failed to build report: %w", err)
-	}
-
-	if _, err := w.sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-		QueueUrl:      queueUrl,
-		ReceiptHandle: message.ReceiptHandle,
-	}); err != nil {
-		return fmt.Errorf("failed to delete message %s %w", *message.MessageId, err)
 	}
 
 	return nil

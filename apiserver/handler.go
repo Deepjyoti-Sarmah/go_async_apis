@@ -31,8 +31,8 @@ func (r SignupRequest) Validate() error {
 }
 
 type ApiResponse[T any] struct {
-	Data    *T     `json:"data, omitempty"`
-	Message string `json:"message, omitempty"`
+	Data    *T     `json:"data,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func (s *ApiServer) signupHandler() http.HandlerFunc {
@@ -73,7 +73,7 @@ func (s *ApiServer) signupHandler() http.HandlerFunc {
 		// 	return NewErrWithStatus(http.StatusInternalServerError, err)
 		// }
 
-		if err := encode[ApiResponse[struct{}]](ApiResponse[struct{}]{
+		if err := encode(ApiResponse[struct{}]{
 			Message: "successfully signed up user",
 		}, http.StatusCreated, w); err != nil {
 			return NewErrWithStatus(http.StatusInternalServerError, err)
@@ -237,16 +237,16 @@ func (r CreateReportRequest) Validate() error {
 
 type ApiReport struct {
 	Id                   uuid.UUID  `json:"id"`
-	ReportType           string     `json:"report_type, omitempty"`
-	OutputFilePath       *string    `json:"output_file_path, omitempty"`
-	DownloadUrl          *string    `json:"download_url, omitempty"`
-	DownloadUrlExpiresAt *time.Time `json:"download_url_expires_at, omitempty"`
-	ErrorMessage         *string    `json:"error_message, omitempty"`
-	CreatedAt            time.Time  `json:"created_at, omitempty"`
-	StartedAt            *time.Time `json:"started_at, omitempty"`
-	CompletedAt          *time.Time `json:"completed_at, omitempty"`
-	FailedAt             *time.Time `json:"failed_at, omitempty"`
-	Status               string     `json:"status, omitempty"`
+	ReportType           string     `json:"report_type,omitempty"`
+	OutputFilePath       *string    `json:"output_file_path,omitempty"`
+	DownloadUrl          *string    `json:"download_url,omitempty"`
+	DownloadUrlExpiresAt *time.Time `json:"download_url_expires_at,omitempty"`
+	ErrorMessage         *string    `json:"error_message,omitempty"`
+	CreatedAt            time.Time  `json:"created_at,omitempty"`
+	StartedAt            *time.Time `json:"started_at,omitempty"`
+	CompletedAt          *time.Time `json:"completed_at,omitempty"`
+	FailedAt             *time.Time `json:"failed_at,omitempty"`
+	Status               string     `json:"status,omitempty"`
 }
 
 func (s *ApiServer) createReportHandler() http.HandlerFunc {
@@ -333,24 +333,28 @@ func (s *ApiServer) getReportHander() http.HandlerFunc {
 			return NewErrWithStatus(http.StatusInternalServerError, err)
 		}
 
-		if report.CompletedAt != nil && report.DownloadUrlExpiresAt != nil && report.DownloadUrlExpiresAt.Before(time.Now()) {
+		if report.CompletedAt != nil {
+			needsRefresh := report.DownloadUrlExpiresAt != nil && report.DownloadUrlExpiresAt.Before(time.Now())
 			// to s3 client (presigned client)
-			expiresAt := time.Now().Add(time.Second * 10)
-			signedUrl, err := s.presignedClient.PresignGetObject(r.Context(), &s3.GetObjectInput{
-				Bucket: aws.String(s.config.S3Bucket),
-				Key:    report.OutputFilePath,
-			}, func(options *s3.PresignOptions) {
-				options.Expires = time.Second * 10
-			})
-			if err != nil {
-				return NewErrWithStatus(http.StatusInternalServerError, err)
-			}
-			report.DownloadUrl = &signedUrl.URL
-			report.DownloadUrlExpiresAt = &expiresAt
+			if report.DownloadUrl == nil || needsRefresh {
 
-			report, err = s.store.ReportStore.Update(r.Context(), report)
-			if err != nil {
-				return NewErrWithStatus(http.StatusInternalServerError, err)
+				expiresAt := time.Now().Add(time.Second * 10)
+				signedUrl, err := s.presignedClient.PresignGetObject(r.Context(), &s3.GetObjectInput{
+					Bucket: aws.String(s.config.S3Bucket),
+					Key:    report.OutputFilePath,
+				}, func(options *s3.PresignOptions) {
+					options.Expires = time.Second * 10
+				})
+				if err != nil {
+					return NewErrWithStatus(http.StatusInternalServerError, err)
+				}
+				report.DownloadUrl = &signedUrl.URL
+				report.DownloadUrlExpiresAt = &expiresAt
+
+				report, err = s.store.ReportStore.Update(r.Context(), report)
+				if err != nil {
+					return NewErrWithStatus(http.StatusInternalServerError, err)
+				}
 			}
 		}
 
