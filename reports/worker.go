@@ -22,12 +22,13 @@ type Worker struct {
 	concurrency int
 }
 
-func NewWorker(config *config.Config, logger *slog.Logger, sqsClient *sqs.Client, maxComcurrency int) *Worker {
+func NewWorker(config *config.Config, logger *slog.Logger, builder *ReportBuilder, sqsClient *sqs.Client, maxConcurrency int) *Worker {
 	return &Worker{
 		config:    config,
 		logger:    logger,
+		builder:   builder,
 		sqsClient: sqsClient,
-		channel:   make(chan types.Message, maxComcurrency),
+		channel:   make(chan types.Message, maxConcurrency),
 	}
 }
 
@@ -79,11 +80,10 @@ func (w *Worker) Start(ctx context.Context) error {
 			w.channel <- message
 		}
 	}
-
-	return nil
 }
 
 func (w *Worker) processMessage(ctx context.Context, message types.Message, queueUrl *string) error {
+	w.logger.Info("processing message", "message_id", *message.MessageId)
 	if message.Body == nil || *message.Body == "" {
 		w.logger.Warn("message body is invalid", "messgae_id", message.MessageId)
 		return nil
@@ -100,6 +100,13 @@ func (w *Worker) processMessage(ctx context.Context, message types.Message, queu
 	_, err := w.builder.Build(builderCtx, msg.UserId, msg.ReportId)
 	if err != nil {
 		return fmt.Errorf("failed to build report: %w", err)
+	}
+
+	if _, err := w.sqsClient.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+		QueueUrl:      queueUrl,
+		ReceiptHandle: message.ReceiptHandle,
+	}); err != nil {
+		return fmt.Errorf("failed to delete message %s %w", *message.MessageId, err)
 	}
 
 	return nil
