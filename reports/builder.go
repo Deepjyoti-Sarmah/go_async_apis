@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type RepportBuilder struct {
+type ReportBuilder struct {
 	config      *config.Config
 	reportStore *store.ReportStore
 	LozClient   *LozClient
@@ -26,8 +26,8 @@ type RepportBuilder struct {
 	logger      *slog.Logger
 }
 
-func NewReportBuilder(config *config.Config, reportStore *store.ReportStore, lozClient *LozClient, s3Client *s3.Client, logger *slog.Logger) *RepportBuilder {
-	return &RepportBuilder{
+func NewReportBuilder(config *config.Config, reportStore *store.ReportStore, lozClient *LozClient, s3Client *s3.Client, logger *slog.Logger) *ReportBuilder {
+	return &ReportBuilder{
 		reportStore: reportStore,
 		LozClient:   lozClient,
 		s3Client:    s3Client,
@@ -35,7 +35,7 @@ func NewReportBuilder(config *config.Config, reportStore *store.ReportStore, loz
 	}
 }
 
-func (b *RepportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId uuid.UUID) (report *store.Report, err error) {
+func (b *ReportBuilder) Build(ctx context.Context, userId uuid.UUID, reportId uuid.UUID) (report *store.Report, err error) {
 	report, err = b.reportStore.ByPrimaryKey(ctx, userId, reportId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get report %s for usrr %s: %w", reportId, userId, err)
